@@ -1,10 +1,65 @@
 {
-  "service": {
-    "name": "ModelPilot Gateway",
-    "version": "0.1.0"
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "language": "zh-CN",
+    "log_level": "INFO"
   },
-  "logging": {
-    "level": "INFO"
+  "models": {
+    "cheap_model": {
+      "enabled": false,
+      "provider": "openai",
+      "model": "cheap-model-placeholder",
+      "base_url": "",
+      "api_key": ""
+    },
+    "mid_model": {
+      "enabled": false,
+      "provider": "openai",
+      "model": "mid-model-placeholder",
+      "base_url": "",
+      "api_key": ""
+    },
+    "strong_model": {
+      "enabled": false,
+      "provider": "openai",
+      "model": "strong-model-placeholder",
+      "base_url": "",
+      "api_key": ""
+    },
+    "ollama_local": {
+      "enabled": false,
+      "provider": "ollama",
+      "model": "ollama-model-placeholder",
+      "base_url": "http://127.0.0.1:11434",
+      "api_key": ""
+    }
+  },
+  "virtual_models": {
+    "smart-auto": {
+      "enabled": true,
+      "strategy": "manual-placeholder",
+      "description": "Placeholder virtual model for future routing.",
+      "candidate_models": [
+        "cheap_model",
+        "mid_model",
+        "strong_model"
+      ]
+    }
+  },
+  "classifier": {
+    "enabled": false,
+    "default_virtual_model": "smart-auto"
+  },
+  "validation": {
+    "enabled": false,
+    "max_prompt_chars": 20000
+  },
+  "users": {
+    "default_user": {
+      "enabled": true,
+      "name": "Default User",
+      "api_key": "sk-modelpilot-test-key"
+    }
   }
 }
-
