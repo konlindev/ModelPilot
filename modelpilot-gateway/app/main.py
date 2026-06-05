@@ -19,6 +19,7 @@ from app.backend_clients import BackendClientError, OpenAICompatibleClient
 from app.config_loader import load_config
 from app.logging_config import setup_logging
 from app.quota import InMemoryQuotaManager
+from app.router_engine import select_model_by_rules
 from app.schemas import (
     ChatCompletionRequest,
     ErrorResponse,
@@ -114,21 +115,6 @@ async def chat_completions(
     except HTTPException as exc:
         return _exception_response(exc)
 
-    if requested_model == "smart-auto":
-        return _error_response(
-            status_code=400,
-            message="smart-auto will be implemented in Phase 4",
-            code="smart_auto_not_implemented",
-        )
-
-    model_config = APP_CONFIG.models.get(requested_model)
-    if model_config is None or not model_config.enabled:
-        return _error_response(
-            status_code=404,
-            message=f"model not found or disabled: {requested_model}",
-            code="model_not_found",
-        )
-
     if not quota_manager.check_rate_limit(user_id, user.request_per_minute):
         return _error_response(
             status_code=429,
@@ -153,8 +139,39 @@ async def chat_completions(
             error_type="rate_limit_error",
         )
 
-    backend_model = model_config.model or requested_model
+    task_type = "direct_model"
+    route_reason = "direct_model"
+    routed_model = requested_model
+    backend_model = requested_model
+
+    if requested_model == "smart-auto":
+        try:
+            route_decision = select_model_by_rules(
+                request=request,
+                user=user,
+                config=APP_CONFIG,
+                estimated_tokens=estimated_prompt_tokens,
+            )
+        except HTTPException as exc:
+            return _exception_response(exc)
+
+        routed_model = route_decision.routed_model_name
+        backend_model = route_decision.backend_model_name
+        task_type = route_decision.task_type
+        route_reason = route_decision.route_reason
+        model_config = APP_CONFIG.models[routed_model]
+    else:
+        model_config = APP_CONFIG.models.get(requested_model)
+        if model_config is None or not model_config.enabled:
+            return _error_response(
+                status_code=404,
+                message=f"model not found or disabled: {requested_model}",
+                code="model_not_found",
+            )
+        backend_model = model_config.model or requested_model
+
     request_payload = request.model_dump(exclude_none=True)
+    request_payload["model"] = backend_model
 
     try:
         response_data = await openai_client.chat_completions(
@@ -164,10 +181,15 @@ async def chat_completions(
     except BackendClientError as exc:
         elapsed_ms = _elapsed_ms(start_time)
         logger.warning(
-            "request_id=%s requested_model=%s backend_model=%s elapsed_ms=%s failure=%s",
+            "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s elapsed_ms=%s failure=%s",
             request_id,
+            user_id,
             requested_model,
+            routed_model,
             backend_model,
+            task_type,
+            route_reason,
+            estimated_prompt_tokens,
             elapsed_ms,
             exc,
         )
@@ -177,11 +199,15 @@ async def chat_completions(
             code="backend_request_failed",
         )
 
+    if requested_model == "smart-auto":
+        response_data["model"] = requested_model
+
     response_data["modelpilot"] = {
         "request_id": request_id,
-        "routed_model": requested_model,
+        "routed_model": routed_model,
         "backend_model": backend_model,
-        "route_reason": "direct_model",
+        "task_type": task_type,
+        "route_reason": route_reason,
         "classifier_used": False,
         "auto_upgrade_used": False,
     }
@@ -196,10 +222,15 @@ async def chat_completions(
         completion_tokens=completion_tokens,
     )
     logger.info(
-        "request_id=%s requested_model=%s backend_model=%s elapsed_ms=%s success=true",
+        "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s elapsed_ms=%s success=true",
         request_id,
+        user_id,
         requested_model,
+        routed_model,
         backend_model,
+        task_type,
+        route_reason,
+        estimated_prompt_tokens,
         elapsed_ms,
     )
 

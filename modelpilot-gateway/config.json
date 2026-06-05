@@ -10,6 +10,8 @@
     "cheap_model": {
       "enabled": false,
       "provider": "openai",
+      "tier": "cheap",
+      "max_context_tokens": 8000,
       "model": "cheap-model-placeholder",
       "base_url": "",
       "api_key": ""
@@ -17,6 +19,8 @@
     "mid_model": {
       "enabled": false,
       "provider": "openai",
+      "tier": "mid",
+      "max_context_tokens": 32000,
       "model": "mid-model-placeholder",
       "base_url": "",
       "api_key": ""
@@ -24,6 +28,8 @@
     "strong_model": {
       "enabled": false,
       "provider": "openai",
+      "tier": "strong",
+      "max_context_tokens": 128000,
       "model": "strong-model-placeholder",
       "base_url": "",
       "api_key": ""
@@ -31,6 +37,8 @@
     "ollama_local": {
       "enabled": false,
       "provider": "ollama",
+      "tier": "cheap",
+      "max_context_tokens": 4096,
       "model": "ollama-model-placeholder",
       "base_url": "http://127.0.0.1:11434",
       "api_key": ""

@@ -114,7 +114,7 @@ def test_streaming_returns_400(monkeypatch) -> None:
     assert response.json()["error"]["code"] == "streaming_not_implemented"
 
 
-def test_smart_auto_returns_400(monkeypatch) -> None:
+def test_disabled_real_model_returns_404(monkeypatch) -> None:
     import app.main as main_module
 
     monkeypatch.setattr(main_module, "APP_CONFIG", make_test_config())
@@ -124,11 +124,14 @@ def test_smart_auto_returns_400(monkeypatch) -> None:
     response = client.post(
         "/v1/chat/completions",
         headers=AUTH_HEADERS,
-        json={"model": "smart-auto", "messages": [{"role": "user", "content": "hi"}]},
+        json={
+            "model": "disabled_model",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "smart_auto_not_implemented"
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "model_not_found"
 
 
 def test_real_model_forwards_to_openai_compatible_backend(monkeypatch) -> None:

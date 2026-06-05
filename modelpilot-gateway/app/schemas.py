@@ -105,6 +105,8 @@ class ModelConfig(BaseModel):
     description: str | None = None
     strategy: str | None = None
     candidate_models: list[str] = Field(default_factory=list)
+    tier: str | None = None
+    max_context_tokens: int | None = Field(default=None, ge=1)
 
 
 class UserConfig(BaseModel):

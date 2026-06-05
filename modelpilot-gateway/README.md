@@ -2,9 +2,9 @@
 
 ModelPilot Gateway is the Python backend gateway for ModelPilot.
 
-Current scope includes FastAPI basics, config loading, logging, API key authentication, basic user permissions, in-memory quotas, and non-streaming OpenAI-compatible forwarding for enabled real models.
+Current scope includes FastAPI basics, config loading, logging, API key authentication, basic user permissions, in-memory quotas, rule-based smart-auto routing, and non-streaming OpenAI-compatible forwarding for enabled real models.
 
-Not included yet: smart-auto routing, classifier logic, automatic upgrade, database persistence, Redis, Ollama implementation, or streaming forwarding.
+Not included yet: classifier logic, automatic upgrade, database persistence, Redis, Ollama implementation, or streaming forwarding.
 
 ## Requirements
 
@@ -45,6 +45,8 @@ Edit `config.json` and enable one real model under `models`.
     "cheap_model": {
       "enabled": true,
       "provider": "openai",
+      "tier": "cheap",
+      "max_context_tokens": 8000,
       "model": "gpt-4o-mini",
       "base_url": "https://api.openai.com/v1",
       "api_key": "sk-your-real-backend-api-key"
@@ -54,6 +56,34 @@ Edit `config.json` and enable one real model under `models`.
 ```
 
 If `base_url` ends with `/v1`, requests are sent to `/v1/chat/completions`.
+
+## Configure Model Tiers
+
+`smart-auto` uses `tier` and `max_context_tokens` from each real model.
+
+```json
+{
+  "models": {
+    "cheap_model": {
+      "enabled": true,
+      "tier": "cheap",
+      "max_context_tokens": 8000
+    },
+    "mid_model": {
+      "enabled": true,
+      "tier": "mid",
+      "max_context_tokens": 32000
+    },
+    "strong_model": {
+      "enabled": true,
+      "tier": "strong",
+      "max_context_tokens": 128000
+    }
+  }
+}
+```
+
+Supported tier values are `cheap`, `mid`, and `strong`.
 
 ## Configure Users
 
@@ -105,7 +135,32 @@ curl -X POST http://127.0.0.1:8000/v1/chat/completions `
   -d '{"model":"cheap_model","messages":[{"role":"user","content":"hello"}]}'
 ```
 
+Use rule-based smart-auto:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/v1/chat/completions `
+  -H "Authorization: Bearer sk-modelpilot-test-key" `
+  -H "Content-Type: application/json" `
+  -d '{"model":"smart-auto","messages":[{"role":"user","content":"Write an Amazon listing title"}]}'
+```
+
 The response includes a `modelpilot` metadata object with request id, routed model, backend model, and routing flags.
+
+## smart-auto Rules
+
+Current rule routing is intentionally simple:
+
+- `translate` or `翻译` routes as `translation`, usually cheap tier.
+- `summarize`, `总结`, or `摘要` routes as `summary`, short summaries usually cheap tier.
+- `rewrite`, `改写`, or `润色` routes as `rewrite`, usually cheap tier.
+- `JSON`, `extract`, or `提取` routes as `json_extraction`, usually mid tier.
+- `Amazon`, `Walmart`, `listing`, `标题`, or `商品描述` routes as `product_copywriting`, usually mid tier.
+- `code`, `python`, `javascript`, `debug`, or `报错` routes as `code_generation`, usually strong tier.
+- `strategy`, `商业`, `战略`, or `分析` routes as `strategy_analysis`, usually strong tier.
+- `legal`, `contract`, `合同`, or `法务` routes as `legal_or_policy`, usually strong tier.
+- Unknown requests default to mid tier.
+
+If estimated tokens exceed `cheap_model.max_context_tokens`, the router upgrades to mid tier. If estimated tokens exceed `mid_model.max_context_tokens`, it upgrades to strong tier. Disabled models and models outside the user's `allowed_models` are skipped.
 
 ## Test
 
@@ -129,11 +184,11 @@ Implemented:
 - In-memory request-per-minute and token quota checks
 - `GET /v1/models` filtered by authenticated user permissions
 - Non-streaming `POST /v1/chat/completions` for enabled real models
+- Rule-based `smart-auto` routing for enabled real models
 - Basic OpenAI-compatible backend forwarding
 
 Not implemented in this stage:
 
-- smart-auto routing
 - Complex permission policy engine
 - Request classifier
 - Automatic upgrade logic
