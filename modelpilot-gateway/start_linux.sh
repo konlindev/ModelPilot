@@ -57,6 +57,10 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
+echo "Checking GitHub repository for updates..."
+echo "正在检查 GitHub 仓库更新..."
+python -m app.update_checker
+
 echo "Installing requirements..."
 echo "正在安装依赖..."
 python -m pip install -r requirements.txt

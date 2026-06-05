@@ -38,6 +38,8 @@ chmod +x start_linux.sh
 
 首次运行时，启动脚本会在安装依赖后进入终端文字向导，先选择中文或英文，然后逐步完成后端模型、分类器、默认用户 API Key、额度和权限配置。
 
+启动脚本还会先检查 GitHub 仓库 `main` 分支是否有更新。如果有新版本，会先拉取代码并保持本地为最新，再继续安装依赖和启动服务。公开仓库无需配置 GitHub token；私有仓库可在 `modelpilot-gateway/config.json` 的 `github.token` 中填写 token。
+
 ## 部署方式 / Deployment
 
 ### Windows 单机部署
@@ -98,6 +100,7 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 - 使用 HTTPS 保护 API 调用。
 - 不要把真实后端 API Key 提交到公开仓库。
 - 当前额度统计是内存版，服务重启后会清零；生产环境后续建议接入 Redis 或数据库。
+- 启动脚本会自动检查 GitHub 更新。拉取代码时会保护本地 `modelpilot-gateway/config.json`，避免覆盖本机 API Key、用户和模型配置。
 
 ## 配置说明 / Configuration
 
@@ -118,6 +121,7 @@ modelpilot-gateway/config.json
 - `validation`：结果校验和自动升级配置。
 - `users`：用户 API Key、允许模型、IP 规则、时间规则、频率限制和 token 额度。
 - `setup`：首次运行文字向导状态。
+- `github`：启动时自动检查 GitHub 更新的配置。
 
 OpenAI-compatible 后端模型示例：
 
@@ -173,6 +177,30 @@ Ollama 示例：
   }
 }
 ```
+
+GitHub 更新检测示例：
+
+```json
+{
+  "github": {
+    "update_check_enabled": true,
+    "remote": "origin",
+    "branch": "main",
+    "repo_url": "https://github.com/konlindev/ModelPilot.git",
+    "token": "",
+    "protect_config": true,
+    "protected_paths": [
+      "modelpilot-gateway/config.json"
+    ]
+  }
+}
+```
+
+说明：
+
+- 公开仓库可以保持 `token` 为空。
+- 私有仓库需要在 `token` 中填写 GitHub Personal Access Token。
+- 自动拉取更新时不会覆盖 `protected_paths` 中列出的本地配置文件。
 
 更完整的配置字段说明见：
 

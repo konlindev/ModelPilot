@@ -165,6 +165,22 @@ class SetupConfig(BaseModel):
     completed_at: str | None = None
 
 
+class GitHubUpdateConfig(BaseModel):
+    """GitHub update check configuration."""
+
+    model_config = ConfigDict(extra="allow")
+
+    update_check_enabled: bool = True
+    remote: str = "origin"
+    branch: str = "main"
+    repo_url: str = "https://github.com/konlindev/ModelPilot.git"
+    token: str | None = None
+    protect_config: bool = True
+    protected_paths: list[str] = Field(
+        default_factory=lambda: ["modelpilot-gateway/config.json"]
+    )
+
+
 class AppConfig(BaseModel):
     """Top-level application configuration."""
 
@@ -177,3 +193,4 @@ class AppConfig(BaseModel):
     validation: ValidationConfig
     users: dict[str, UserConfig]
     setup: SetupConfig = Field(default_factory=SetupConfig)
+    github: GitHubUpdateConfig = Field(default_factory=GitHubUpdateConfig)

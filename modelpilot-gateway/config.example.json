@@ -126,5 +126,16 @@
     "completed": false,
     "language": "zh",
     "completed_at": null
+  },
+  "github": {
+    "update_check_enabled": true,
+    "remote": "origin",
+    "branch": "main",
+    "repo_url": "https://github.com/konlindev/ModelPilot.git",
+    "token": "",
+    "protect_config": true,
+    "protected_paths": [
+      "modelpilot-gateway/config.json"
+    ]
   }
 }

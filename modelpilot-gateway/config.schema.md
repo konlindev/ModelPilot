@@ -20,6 +20,22 @@ To re-run setup:
 python -m app.setup_wizard --force
 ```
 
+## github
+
+Startup-time GitHub update check configuration.
+
+启动脚本中的 GitHub 自动更新检测配置。
+
+- `update_check_enabled`: Whether startup scripts should check GitHub before running the service.
+- `remote`: Git remote name. Default: `origin`.
+- `branch`: Remote branch to track. Default: `main`.
+- `repo_url`: Repository URL for documentation and operator reference.
+- `token`: Optional GitHub token. Public repositories can leave this empty. Private repositories should set a Personal Access Token here.
+- `protect_config`: Whether to preserve local config files during auto update.
+- `protected_paths`: Paths that must be restored after pulling updates. Default: `["modelpilot-gateway/config.json"]`.
+
+When updates are pulled, `config.json` is restored to the local version so local API keys, user settings, and backend model settings are not overwritten.
+
 ## server
 
 - `host`: Service host used for local display and startup messages. Example: `127.0.0.1`.

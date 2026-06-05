@@ -24,6 +24,36 @@ ModelPilot Gateway 是 ModelPilot 的 Python FastAPI 网关服务，用于企业
 python -m app.setup_wizard --force
 ```
 
+### GitHub 自动更新检测
+
+`start_windows.bat` 和 `start_linux.sh` 会在启动服务前执行：
+
+```bash
+python -m app.update_checker
+```
+
+该步骤会检查 GitHub 仓库 `main` 分支是否有新提交。如果有更新，会先 fast-forward 拉取代码，再安装依赖并启动服务。公开仓库可以不配置 GitHub token；私有仓库可在 `config.json` 的 `github.token` 中填写 Personal Access Token。
+
+自动更新会保护本地 `config.json`，不会用仓库中的默认配置覆盖本机 API Key、用户权限、后端模型等配置。
+
+示例：
+
+```json
+{
+  "github": {
+    "update_check_enabled": true,
+    "remote": "origin",
+    "branch": "main",
+    "repo_url": "https://github.com/konlindev/ModelPilot.git",
+    "token": "",
+    "protect_config": true,
+    "protected_paths": [
+      "modelpilot-gateway/config.json"
+    ]
+  }
+}
+```
+
 ### 架构说明
 
 ```text
@@ -273,6 +303,18 @@ To re-run the wizard:
 ```bash
 python -m app.setup_wizard --force
 ```
+
+### Startup Update Check
+
+The Windows and Linux startup scripts run this before installing dependencies and starting the service:
+
+```bash
+python -m app.update_checker
+```
+
+It checks the configured GitHub remote branch and fast-forwards local code when a newer version is available. Public repositories do not need a GitHub token. For private repositories, set `github.token` in `config.json`.
+
+Local `config.json` is preserved during auto update, so local API keys, users, permissions, and backend model settings are not overwritten by repository defaults.
 
 ### Quick Start
 
