@@ -146,7 +146,12 @@ class ValidationConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    enabled: bool = False
+    enabled: bool = True
+    auto_upgrade_enabled: bool = True
+    apply_to_direct_model: bool = False
+    min_response_chars: int = Field(default=5, ge=0)
+    banned_words: list[str] = Field(default_factory=list)
+    competitor_brand_words: list[str] = Field(default_factory=list)
     max_prompt_chars: int = Field(default=20000, ge=1)
 
 

@@ -19,7 +19,7 @@ from app.backend_clients import BackendClientError, OpenAICompatibleClient
 from app.config_loader import load_config
 from app.logging_config import setup_logging
 from app.quota import InMemoryQuotaManager
-from app.router_engine import select_model_by_rules
+from app.router_engine import get_next_upgrade_model, select_model_by_rules
 from app.schemas import (
     ChatCompletionRequest,
     ErrorResponse,
@@ -27,6 +27,7 @@ from app.schemas import (
     ModelInfo,
     ModelListResponse,
 )
+from app.validators import validate_model_response
 
 APP_CONFIG = load_config()
 LOG_FILE_PATH = setup_logging(APP_CONFIG)
@@ -184,49 +185,132 @@ async def chat_completions(
             )
         backend_model = model_config.model or requested_model
 
-    request_payload = request.model_dump(exclude_none=True)
-    request_payload["model"] = backend_model
+    validation_passed = True
+    validation_reason = "not_applied"
+    validation_severity = "low"
+    auto_upgrade_used = False
+    upgrade_chain: list[dict[str, Any]] = []
+    should_validate = APP_CONFIG.validation.enabled and (
+        requested_model == "smart-auto" or APP_CONFIG.validation.apply_to_direct_model
+    )
 
-    try:
-        response_data = await openai_client.chat_completions(
-            request_payload=request_payload,
-            model_config=model_config,
+    current_model = routed_model
+    current_model_config = model_config
+    current_backend_model = backend_model
+
+    while True:
+        try:
+            response_data = await _call_backend_model(
+                request=request,
+                model_config=current_model_config,
+                backend_model=current_backend_model,
+            )
+        except BackendClientError as exc:
+            elapsed_ms = _elapsed_ms(start_time)
+            logger.warning(
+                "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s classifier_enabled=%s classifier_used=%s classifier_success=%s classifier_task_type=%s classifier_recommended_tier=%s classifier_confidence=%s fallback_to_rule_route=%s elapsed_ms=%s failure=%s",
+                request_id,
+                user_id,
+                requested_model,
+                current_model,
+                current_backend_model,
+                task_type,
+                route_reason,
+                estimated_prompt_tokens,
+                classifier_enabled,
+                classifier_used,
+                classifier_success,
+                classifier_task_type,
+                classifier_recommended_tier,
+                classifier_confidence,
+                fallback_to_rule_route,
+                elapsed_ms,
+                exc,
+            )
+            return _error_response(
+                status_code=502,
+                message="backend request failed",
+                code="backend_request_failed",
+            )
+
+        if requested_model == "smart-auto":
+            response_data["model"] = requested_model
+
+        if not should_validate:
+            break
+
+        validation_result = validate_model_response(
+            response_json=response_data,
+            request=request,
+            config=APP_CONFIG,
         )
-    except BackendClientError as exc:
-        elapsed_ms = _elapsed_ms(start_time)
-        logger.warning(
-            "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s classifier_enabled=%s classifier_used=%s classifier_success=%s classifier_task_type=%s classifier_recommended_tier=%s classifier_confidence=%s fallback_to_rule_route=%s elapsed_ms=%s failure=%s",
+        validation_passed = validation_result.passed
+        validation_reason = validation_result.reason
+        validation_severity = validation_result.severity
+
+        if validation_result.passed:
+            break
+
+        next_model = None
+        if APP_CONFIG.validation.auto_upgrade_enabled and user.allow_auto_upgrade:
+            next_model = get_next_upgrade_model(
+                current_model=current_model,
+                user=user,
+                config=APP_CONFIG,
+            )
+
+        if next_model is None:
+            elapsed_ms = _elapsed_ms(start_time)
+            logger.warning(
+                "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s validation_passed=false validation_reason=%s validation_severity=%s auto_upgrade_used=%s upgrade_chain=%s elapsed_ms=%s failure=validation_failed",
+                request_id,
+                user_id,
+                requested_model,
+                current_model,
+                current_backend_model,
+                validation_reason,
+                validation_severity,
+                auto_upgrade_used,
+                upgrade_chain,
+                elapsed_ms,
+            )
+            return _error_response(
+                status_code=502,
+                message=f"model response validation failed: {validation_reason}",
+                code="validation_failed",
+            )
+
+        upgrade_entry = {
+            "from_model": current_model,
+            "to_model": next_model,
+            "reason": validation_reason,
+            "severity": validation_severity,
+        }
+        upgrade_chain.append(upgrade_entry)
+        auto_upgrade_used = True
+        logger.info(
+            "request_id=%s user=%s auto_upgrade from_model=%s to_model=%s reason=%s severity=%s",
             request_id,
             user_id,
-            requested_model,
-            routed_model,
-            backend_model,
-            task_type,
-            route_reason,
-            estimated_prompt_tokens,
-            classifier_enabled,
-            classifier_used,
-            classifier_success,
-            classifier_task_type,
-            classifier_recommended_tier,
-            classifier_confidence,
-            fallback_to_rule_route,
-            elapsed_ms,
-            exc,
-        )
-        return _error_response(
-            status_code=502,
-            message="backend request failed",
-            code="backend_request_failed",
+            current_model,
+            next_model,
+            validation_reason,
+            validation_severity,
         )
 
-    if requested_model == "smart-auto":
-        response_data["model"] = requested_model
+        current_model = next_model
+        current_model_config = APP_CONFIG.models[current_model]
+        current_backend_model = current_model_config.model or current_model
+        routed_model = current_model
+        backend_model = current_backend_model
+        validation_passed = True
+        validation_reason = "not_applied"
+        validation_severity = "low"
 
     response_data["modelpilot"] = {
         "request_id": request_id,
-        "routed_model": routed_model,
-        "backend_model": backend_model,
+        "routed_model": current_model,
+        "backend_model": current_backend_model,
         "task_type": task_type,
         "route_reason": route_reason,
         "classifier_enabled": classifier_enabled,
@@ -236,7 +320,10 @@ async def chat_completions(
         "classifier_recommended_tier": classifier_recommended_tier,
         "classifier_confidence": classifier_confidence,
         "fallback_to_rule_route": fallback_to_rule_route,
-        "auto_upgrade_used": False,
+        "validation_passed": validation_passed,
+        "validation_reason": validation_reason,
+        "auto_upgrade_used": auto_upgrade_used,
+        "upgrade_chain": upgrade_chain,
     }
 
     elapsed_ms = _elapsed_ms(start_time)
@@ -249,12 +336,12 @@ async def chat_completions(
         completion_tokens=completion_tokens,
     )
     logger.info(
-        "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s classifier_enabled=%s classifier_used=%s classifier_success=%s classifier_task_type=%s classifier_recommended_tier=%s classifier_confidence=%s fallback_to_rule_route=%s elapsed_ms=%s success=true",
+        "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s classifier_enabled=%s classifier_used=%s classifier_success=%s classifier_task_type=%s classifier_recommended_tier=%s classifier_confidence=%s fallback_to_rule_route=%s validation_passed=%s validation_reason=%s auto_upgrade_used=%s upgrade_chain=%s elapsed_ms=%s success=true",
         request_id,
         user_id,
         requested_model,
-        routed_model,
-        backend_model,
+        current_model,
+        current_backend_model,
         task_type,
         route_reason,
         estimated_prompt_tokens,
@@ -265,10 +352,27 @@ async def chat_completions(
         classifier_recommended_tier,
         classifier_confidence,
         fallback_to_rule_route,
+        validation_passed,
+        validation_reason,
+        auto_upgrade_used,
+        upgrade_chain,
         elapsed_ms,
     )
 
     return response_data
+
+
+async def _call_backend_model(
+    request: ChatCompletionRequest,
+    model_config,
+    backend_model: str,
+) -> dict[str, Any]:
+    request_payload = request.model_dump(exclude_none=True)
+    request_payload["model"] = backend_model
+    return await openai_client.chat_completions(
+        request_payload=request_payload,
+        model_config=model_config,
+    )
 
 
 def _authorize_request(http_request: Request):

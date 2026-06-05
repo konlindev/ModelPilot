@@ -228,6 +228,33 @@ def find_allowed_fallback_model(
     )
 
 
+def get_next_upgrade_model(
+    current_model: str,
+    user: UserConfig,
+    config: AppConfig,
+) -> str | None:
+    """Return the next higher enabled and allowed model, if available."""
+    current_config = config.models.get(current_model)
+    if current_config is None:
+        return None
+
+    current_tier = _model_tier(current_model, current_config)
+    if current_tier not in TIER_ORDER:
+        return None
+
+    current_index = TIER_ORDER.index(current_tier)
+    for tier in TIER_ORDER[current_index + 1 :]:
+        for model_name, model_config in config.models.items():
+            if not model_config.enabled:
+                continue
+            if _model_tier(model_name, model_config) != tier:
+                continue
+            if _is_allowed(user, model_name):
+                return model_name
+
+    return None
+
+
 def _preferred_tier_for_task(task_type: str, messages: list[ChatMessage]) -> str:
     if task_type in {"rewrite", "translation", "classification"}:
         return "cheap"

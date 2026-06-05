@@ -64,7 +64,12 @@
     "default_virtual_model": "smart-auto"
   },
   "validation": {
-    "enabled": false,
+    "enabled": true,
+    "auto_upgrade_enabled": true,
+    "apply_to_direct_model": false,
+    "min_response_chars": 5,
+    "banned_words": [],
+    "competitor_brand_words": [],
     "max_prompt_chars": 20000
   },
   "users": {

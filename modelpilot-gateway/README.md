@@ -2,9 +2,9 @@
 
 ModelPilot Gateway is the Python backend gateway for ModelPilot.
 
-Current scope includes FastAPI basics, config loading, logging, API key authentication, basic user permissions, in-memory quotas, rule-based `smart-auto` routing, lightweight classifier-assisted routing, and non-streaming OpenAI-compatible forwarding for enabled real models.
+Current scope includes FastAPI basics, config loading, logging, API key authentication, basic user permissions, in-memory quotas, rule-based `smart-auto` routing, lightweight classifier-assisted routing, response validation, automatic tier upgrade, and non-streaming OpenAI-compatible forwarding for enabled real models.
 
-Not included yet: result validation, automatic upgrade, database persistence, Redis, native Ollama implementation, or streaming forwarding.
+Not included yet: database persistence, Redis, native Ollama implementation, Web UI, or streaming forwarding.
 
 ## Requirements
 
@@ -141,6 +141,40 @@ Use any OpenAI-compatible model:
 
 The classifier only recommends `task_type`, `risk_level`, `complexity`, `needs_json`, `recommended_tier`, and `confidence`. Final model selection still checks rules, enabled models, context limits, and user `allowed_models`.
 
+## Configure Validation And Auto Upgrade
+
+Validation runs on `smart-auto` responses when `validation.enabled=true`. Direct real-model requests are validated only when `validation.apply_to_direct_model=true`.
+
+```json
+{
+  "validation": {
+    "enabled": true,
+    "auto_upgrade_enabled": true,
+    "apply_to_direct_model": false,
+    "min_response_chars": 5,
+    "banned_words": [],
+    "competitor_brand_words": [],
+    "max_prompt_chars": 20000
+  }
+}
+```
+
+Auto upgrade follows the tier order `cheap -> mid -> strong`. It only runs when `validation.auto_upgrade_enabled=true`, the user has `allow_auto_upgrade=true`, and the next model is enabled and included in the user's `allowed_models`.
+
+Validation failures that can trigger upgrade:
+
+- Empty response.
+- Missing or empty `choices`.
+- Empty `message.content`.
+- Content shorter than `validation.min_response_chars`.
+- Invalid JSON when `response_format.type` is `json_object` or `json_schema`, or when the prompt asks for strict JSON.
+- Content containing `banned_words`.
+- Content containing `competitor_brand_words`.
+- Backend error text indicating rate limit.
+- Backend error text indicating context length exceeded.
+
+The response `modelpilot` object includes `validation_passed`, `validation_reason`, `auto_upgrade_used`, and `upgrade_chain`.
+
 ## Configure Users
 
 Add or update users under `users` in `config.json`.
@@ -161,7 +195,7 @@ Add or update users under `users` in `config.json`.
       "allowed_models": ["cheap_model", "mid_model", "strong_model", "ollama_local", "smart-auto"],
       "allowed_task_types": ["chat"],
       "allow_stream": false,
-      "allow_auto_upgrade": false
+      "allow_auto_upgrade": true
     }
   }
 }
@@ -242,12 +276,12 @@ Implemented:
 - Non-streaming `POST /v1/chat/completions` for enabled real models
 - Rule-based `smart-auto` routing for enabled real models
 - Optional lightweight classifier guidance for `smart-auto`
+- Response validation for model outputs
+- Automatic `cheap -> mid -> strong` tier upgrade after validation failure
 - Basic OpenAI-compatible backend forwarding
 
 Not implemented in this stage:
 
-- Result validation
-- Automatic upgrade logic
 - Streaming responses
 - Persistent quota storage
 - Database integration
