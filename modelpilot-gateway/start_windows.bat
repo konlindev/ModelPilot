@@ -6,18 +6,19 @@ if /I "%~1"=="--check" (
     exit /b 0
 )
 
-if /I not "%~1"=="--inner" (
-    set "RUNNER=%TEMP%\modelpilot-start-windows-runner.bat"
-    copy /Y "%~f0" "%RUNNER%" >nul
-    if errorlevel 1 (
-        echo [ModelPilot Gateway] Failed to prepare temporary startup runner.
-        pause
-        exit /b 1
-    )
-    call "%RUNNER%" --inner "%~dp0"
-    exit /b %ERRORLEVEL%
-)
+if /I "%~1"=="--inner" goto run_inner
 
+set "RUNNER=%TEMP%\modelpilot-start-windows-runner.bat"
+copy /Y "%~f0" "%RUNNER%" >nul
+if errorlevel 1 (
+    echo [ModelPilot Gateway] Failed to prepare temporary startup runner.
+    pause
+    exit /b 1
+)
+call "%RUNNER%" --inner "%~dp0"
+exit /b %ERRORLEVEL%
+
+:run_inner
 set "PROJECT_DIR=%~2"
 if "%PROJECT_DIR%"=="" set "PROJECT_DIR=%~dp0"
 cd /d "%PROJECT_DIR%"

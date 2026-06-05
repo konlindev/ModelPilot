@@ -562,7 +562,11 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="path to config.json")
     args = parser.parse_args()
     setup_was_needed = args.force or config_needs_setup(args.config)
-    run_text_wizard(config_path=args.config, force=args.force)
+    try:
+        run_text_wizard(config_path=args.config, force=args.force)
+    except EOFError:
+        print("First-run setup needs terminal input. Please run start_windows.bat from Command Prompt and answer the prompts.")
+        raise SystemExit(1) from None
     if setup_was_needed and config_needs_setup(args.config):
         raise SystemExit(1)
 
