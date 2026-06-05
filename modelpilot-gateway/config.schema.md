@@ -2,6 +2,24 @@
 
 This document describes the main fields in `config.json`.
 
+本文说明 `config.json` 的主要字段。
+
+## setup
+
+First-run text wizard state.
+
+首次运行文字向导状态。
+
+- `completed`: Whether the first-run text wizard has been completed. If `false`, startup scripts run `python -m app.setup_wizard` before starting the service.
+- `language`: Language chosen in the wizard. Supported values: `zh`, `en`.
+- `completed_at`: Local timestamp when setup was saved.
+
+To re-run setup:
+
+```bash
+python -m app.setup_wizard --force
+```
+
 ## server
 
 - `host`: Service host used for local display and startup messages. Example: `127.0.0.1`.
@@ -28,7 +46,7 @@ Real backend model definitions. Keys such as `cheap_model`, `mid_model`, and `st
 Virtual model definitions. The default virtual model is `smart-auto`.
 
 - `enabled`: Whether the virtual model appears in `/v1/models`.
-- `strategy`: Human-readable strategy label, such as `rules-with-classifier`.
+- `strategy`: Human-readable strategy label, such as `rules-with-classifier-validation`.
 - `description`: Optional description.
 - `candidate_models`: Real model names that the virtual model may route to.
 
@@ -37,7 +55,7 @@ Virtual model definitions. The default virtual model is `smart-auto`.
 Optional lightweight classifier configuration.
 
 - `enabled`: Whether classifier-assisted routing is enabled.
-- `backend_model`: A model key from `models`, such as `ollama_local` or `classifier_model`.
+- `backend_model`: A model key from `models`, such as `ollama_local`.
 - `timeout_seconds`: Classifier request timeout.
 - `min_confidence`: Minimum confidence required before classifier advice affects routing.
 - `default_virtual_model`: Usually `smart-auto`.

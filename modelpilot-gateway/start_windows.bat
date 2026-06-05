@@ -66,6 +66,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo Running first-run text setup wizard...
+echo 正在运行首次启动文字配置向导...
+python -m app.setup_wizard
+if errorlevel 1 (
+    echo First-run setup was not completed. Please run this script again after preparing the required values.
+    echo 首次配置未完成。请准备好配置参数后重新运行本脚本。
+    pause
+    exit /b 1
+)
+
 echo Starting ModelPilot Gateway at http://localhost:8000
 echo 正在启动 ModelPilot Gateway：http://localhost:8000
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000

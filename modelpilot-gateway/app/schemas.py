@@ -155,6 +155,16 @@ class ValidationConfig(BaseModel):
     max_prompt_chars: int = Field(default=20000, ge=1)
 
 
+class SetupConfig(BaseModel):
+    """First-run setup wizard state."""
+
+    model_config = ConfigDict(extra="allow")
+
+    completed: bool = False
+    language: str | None = None
+    completed_at: str | None = None
+
+
 class AppConfig(BaseModel):
     """Top-level application configuration."""
 
@@ -166,3 +176,4 @@ class AppConfig(BaseModel):
     classifier: ClassifierConfig
     validation: ValidationConfig
     users: dict[str, UserConfig]
+    setup: SetupConfig = Field(default_factory=SetupConfig)

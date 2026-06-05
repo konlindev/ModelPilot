@@ -40,7 +40,7 @@
       "tier": "cheap",
       "max_context_tokens": 4096,
       "model": "ollama-model-placeholder",
-      "base_url": "http://127.0.0.1:11434",
+      "base_url": "http://127.0.0.1:11434/v1",
       "api_key": ""
     }
   },
@@ -121,5 +121,10 @@
       "allow_stream": false,
       "allow_auto_upgrade": false
     }
+  },
+  "setup": {
+    "completed": false,
+    "language": "zh",
+    "completed_at": null
   }
 }

@@ -4,9 +4,25 @@
 
 ### 项目是什么
 
-ModelPilot Gateway 是一个企业 AI 模型调度与成本治理网关。它提供 OpenAI-compatible API，对上游业务暴露统一的 `/v1/models` 和 `/v1/chat/completions`，对下游连接 OpenAI-compatible 后端、Ollama OpenAI-compatible endpoint 或其他兼容服务。
+ModelPilot Gateway 是 ModelPilot 的 Python FastAPI 网关服务，用于企业 AI 模型调度与成本治理。它对外提供 OpenAI-compatible API，包括 `/v1/models` 和 `/v1/chat/completions`，对内连接 OpenAI-compatible 后端模型、Ollama OpenAI-compatible endpoint 或其他兼容服务。
 
-当前 MVP 已包含：配置加载、日志、API Key 鉴权、基础权限、内存额度、`smart-auto` 规则路由、轻量分类器建议、结果校验和 `cheap -> mid -> strong` 自动升级。
+当前 MVP 已包含：配置加载、日志、API Key 鉴权、基础权限、内存额度、`smart-auto` 规则路由、轻量分类器建议、结果校验，以及 `cheap -> mid -> strong` 自动升级。
+
+### 首次运行文字引导
+
+首次运行 `start_windows.bat` 或 `start_linux.sh` 时，脚本会在安装环境和组件后自动进入终端文字向导：
+
+1. 选择界面语言：中文或英文。
+2. 配置真实后端模型：`cheap_model`、`mid_model`、`strong_model`、`ollama_local`。
+3. 配置轻量分类器，可选择 Ollama 或任意 OpenAI-compatible 后端。
+4. 配置默认用户 API Key、请求频率、token 额度、允许模型和自动升级权限。
+5. 确认后写入 `config.json`，并设置 `setup.completed=true`。
+
+如果需要重新进入文字向导：
+
+```bash
+python -m app.setup_wizard --force
+```
 
 ### 架构说明
 
@@ -25,6 +41,7 @@ Client / SDK
 核心模块：
 
 - `app/main.py`：FastAPI 入口和 OpenAI-compatible API。
+- `app/setup_wizard.py`：首次运行文字配置向导。
 - `app/config_loader.py`：加载并校验 `config.json`。
 - `app/auth.py`：API Key、IP、时间和模型权限。
 - `app/quota.py`：内存版频率和 token 额度。
@@ -42,7 +59,7 @@ Client / SDK
 .\start_windows.bat
 ```
 
-脚本会检查 Python，必要时尝试使用 `winget install Python.Python.3.12`，然后创建 `.venv`、安装依赖，并启动：
+脚本会检查 Python，必要时尝试使用 `winget install Python.Python.3.12`，然后创建 `.venv`、安装 `requirements.txt`、运行首次文字向导，并启动：
 
 ```powershell
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -57,11 +74,11 @@ chmod +x start_linux.sh
 ./start_linux.sh
 ```
 
-脚本会检查 `python3`、`venv` 和 `pip`，尽量通过 `apt`、`dnf` 或 `yum` 安装缺失依赖，然后创建 `.venv`、安装依赖并启动服务。
+脚本会检查 `python3`、`venv` 和 `pip`，尽量通过 `apt`、`dnf` 或 `yum` 安装缺失依赖，然后创建 `.venv`、安装依赖、运行首次文字向导并启动服务。
 
 ### 如何配置 OpenAI-compatible 后端模型
 
-编辑 `config.json` 的 `models`：
+可以通过首次文字向导配置，也可以手动编辑 `config.json` 的 `models`：
 
 ```json
 {
@@ -83,7 +100,7 @@ chmod +x start_linux.sh
 
 ### 如何配置 Ollama
 
-Ollama 需要启用 OpenAI-compatible endpoint，例如：
+Ollama 通过 OpenAI-compatible endpoint 接入：
 
 ```json
 {
@@ -101,7 +118,7 @@ Ollama 需要启用 OpenAI-compatible endpoint，例如：
 }
 ```
 
-也可以把 `classifier.backend_model` 设置为 `ollama_local`，让 Ollama 作为轻量分类器。
+也可以设置 `classifier.backend_model="ollama_local"`，让 Ollama 作为轻量分类器。
 
 ### 如何新增用户 API Key
 
@@ -129,7 +146,7 @@ Ollama 需要启用 OpenAI-compatible endpoint，例如：
 }
 ```
 
-客户端可使用：
+客户端可以使用：
 
 ```text
 Authorization: Bearer sk-team-user-key
@@ -146,7 +163,7 @@ x-api-key: sk-team-user-key
 常用权限字段：
 
 - `enabled`：用户是否启用。
-- `allowed_models`：用户可访问的模型，如 `["smart-auto", "cheap_model"]`。
+- `allowed_models`：用户可访问的模型，例如 `["smart-auto", "cheap_model"]`。
 - `ip_allowlist`：非空时只允许列表内 IP。
 - `ip_denylist`：拒绝列表内 IP。
 - `allowed_hours`：允许访问的小时，范围 `0-23`。
@@ -172,7 +189,7 @@ ModelPilot Gateway 对外提供 OpenAI-compatible base URL：
 http://localhost:8000/v1
 ```
 
-模型名可以使用真实模型别名，例如 `cheap_model`，也可以使用虚拟模型 `smart-auto`。
+模型名可以是真实模型别名，例如 `cheap_model`，也可以是虚拟模型 `smart-auto`。
 
 ### curl 示例
 
@@ -209,13 +226,16 @@ print(resp.choices[0].message.content)
 检查后端模型是否 `enabled=true`，以及当前用户 `allowed_models` 是否包含对应模型。
 
 请求返回 401：
-检查是否传入 `Authorization: Bearer ...` 或 `x-api-key`，以及用户是否 enabled。
+检查是否传入 `Authorization: Bearer ...` 或 `x-api-key`，以及用户是否启用。
 
 请求返回 403：
 通常是模型不在 `allowed_models`、IP 不允许、当前小时不允许，或没有可升级的高阶模型。
 
 请求返回 `validation_failed`：
 模型输出未通过基础校验，且无法继续升级到更高模型。
+
+如何重新配置首次向导：
+运行 `python -m app.setup_wizard --force`。
 
 日志在哪里：
 日志写入 `logs/YYYYMMDD_HHMMSS.log`，同时输出到控制台。
@@ -244,6 +264,16 @@ print(resp.choices[0].message.content)
 
 ModelPilot Gateway is a Python FastAPI gateway for enterprise AI model routing and cost governance. It exposes OpenAI-compatible endpoints while routing requests to configured backend models.
 
+### First-Run Text Wizard
+
+After dependencies are installed, `start_windows.bat` and `start_linux.sh` run a terminal-based setup wizard. The wizard first asks you to choose Chinese or English, then guides backend models, classifier, default user API key, quotas, allowed models, and auto-upgrade permission.
+
+To re-run the wizard:
+
+```bash
+python -m app.setup_wizard --force
+```
+
 ### Quick Start
 
 Windows:
@@ -263,6 +293,7 @@ Manual start:
 
 ```bash
 python -m pip install -r requirements.txt
+python -m app.setup_wizard
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -284,6 +315,12 @@ Enable a backend model in `config.json`:
     }
   }
 }
+```
+
+For Ollama, use the OpenAI-compatible endpoint:
+
+```text
+http://127.0.0.1:11434/v1
 ```
 
 ### Use As OpenAI-Compatible base_url
