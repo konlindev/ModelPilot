@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 
+from app import classifier as classifier_module
 from app.auth import check_model_permission
 from app.schemas import AppConfig, ChatCompletionRequest, ChatMessage, ModelConfig, UserConfig
 
@@ -26,6 +27,12 @@ class RouteDecision:
     route_reason: str
     estimated_tokens: int
     classifier_used: bool = False
+    classifier_enabled: bool = False
+    classifier_success: bool = False
+    classifier_task_type: str | None = None
+    classifier_recommended_tier: str | None = None
+    classifier_confidence: float | None = None
+    fallback_to_rule_route: bool = False
     auto_upgrade_used: bool = False
 
 
@@ -88,6 +95,84 @@ def select_model_by_rules(
     estimated_tokens: int,
 ) -> RouteDecision:
     """Select a real backend model for a smart-auto request."""
+    rule_decision = _rule_route_decision(
+        request=request,
+        user=user,
+        config=config,
+        estimated_tokens=estimated_tokens,
+    )
+
+    if not config.classifier.enabled:
+        return rule_decision
+
+    try:
+        classification = classifier_module.classify_request(request.messages, config)
+    except Exception:
+        classification = None
+
+    if classification is None:
+        return _copy_decision(
+            rule_decision,
+            classifier_enabled=True,
+            classifier_success=False,
+            fallback_to_rule_route=True,
+        )
+
+    if classification.confidence < config.classifier.min_confidence:
+        return _copy_decision(
+            rule_decision,
+            classifier_enabled=True,
+            classifier_success=True,
+            classifier_task_type=classification.task_type,
+            classifier_recommended_tier=classification.recommended_tier,
+            classifier_confidence=classification.confidence,
+            fallback_to_rule_route=True,
+        )
+
+    preferred_tier = classification.recommended_tier
+    if classification.risk_level == "high":
+        preferred_tier = "strong"
+
+    preferred_tier = _upgrade_tier_for_context(
+        preferred_tier=preferred_tier,
+        config=config,
+        estimated_tokens=estimated_tokens,
+    )
+    routed_model_name = find_allowed_fallback_model(
+        user=user,
+        config=config,
+        preferred_tier=preferred_tier,
+    )
+    model_config = config.models[routed_model_name]
+
+    return RouteDecision(
+        routed_model_name=routed_model_name,
+        backend_model_name=model_config.model or routed_model_name,
+        task_type=classification.task_type,
+        route_reason=_classifier_route_reason(
+            classification=classification,
+            preferred_tier=preferred_tier,
+            routed_model_name=routed_model_name,
+            model_config=model_config,
+            estimated_tokens=estimated_tokens,
+        ),
+        estimated_tokens=estimated_tokens,
+        classifier_used=True,
+        classifier_enabled=True,
+        classifier_success=True,
+        classifier_task_type=classification.task_type,
+        classifier_recommended_tier=classification.recommended_tier,
+        classifier_confidence=classification.confidence,
+        fallback_to_rule_route=False,
+    )
+
+
+def _rule_route_decision(
+    request: ChatCompletionRequest,
+    user: UserConfig,
+    config: AppConfig,
+    estimated_tokens: int,
+) -> RouteDecision:
     task_type = detect_task_type(request.messages)
     preferred_tier = _preferred_tier_for_task(task_type, request.messages)
     preferred_tier = _upgrade_tier_for_context(
@@ -185,6 +270,42 @@ def _route_reason(
         f"rule:{task_type};preferred_tier={preferred_tier};"
         f"selected_tier={tier};estimated_tokens={estimated_tokens}"
     )
+
+
+def _classifier_route_reason(
+    classification,
+    preferred_tier: str,
+    routed_model_name: str,
+    model_config: ModelConfig,
+    estimated_tokens: int,
+) -> str:
+    tier = _model_tier(routed_model_name, model_config)
+    return (
+        f"classifier:{classification.task_type};risk_level={classification.risk_level};"
+        f"recommended_tier={classification.recommended_tier};preferred_tier={preferred_tier};"
+        f"selected_tier={tier};confidence={classification.confidence:.2f};"
+        f"estimated_tokens={estimated_tokens}"
+    )
+
+
+def _copy_decision(decision: RouteDecision, **updates) -> RouteDecision:
+    data = {
+        "routed_model_name": decision.routed_model_name,
+        "backend_model_name": decision.backend_model_name,
+        "task_type": decision.task_type,
+        "route_reason": decision.route_reason,
+        "estimated_tokens": decision.estimated_tokens,
+        "classifier_used": decision.classifier_used,
+        "classifier_enabled": decision.classifier_enabled,
+        "classifier_success": decision.classifier_success,
+        "classifier_task_type": decision.classifier_task_type,
+        "classifier_recommended_tier": decision.classifier_recommended_tier,
+        "classifier_confidence": decision.classifier_confidence,
+        "fallback_to_rule_route": decision.fallback_to_rule_route,
+        "auto_upgrade_used": decision.auto_upgrade_used,
+    }
+    data.update(updates)
+    return RouteDecision(**data)
 
 
 def _model_limit(config: AppConfig, model_name: str) -> int | None:

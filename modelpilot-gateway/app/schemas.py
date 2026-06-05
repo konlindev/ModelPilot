@@ -135,6 +135,9 @@ class ClassifierConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     enabled: bool = False
+    backend_model: str = "ollama_local"
+    timeout_seconds: float = Field(default=20.0, gt=0)
+    min_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
     default_virtual_model: str = "smart-auto"
 
 

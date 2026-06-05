@@ -143,6 +143,13 @@ async def chat_completions(
     route_reason = "direct_model"
     routed_model = requested_model
     backend_model = requested_model
+    classifier_enabled = False
+    classifier_used = False
+    classifier_success = False
+    classifier_task_type = None
+    classifier_recommended_tier = None
+    classifier_confidence = None
+    fallback_to_rule_route = False
 
     if requested_model == "smart-auto":
         try:
@@ -159,6 +166,13 @@ async def chat_completions(
         backend_model = route_decision.backend_model_name
         task_type = route_decision.task_type
         route_reason = route_decision.route_reason
+        classifier_enabled = route_decision.classifier_enabled
+        classifier_used = route_decision.classifier_used
+        classifier_success = route_decision.classifier_success
+        classifier_task_type = route_decision.classifier_task_type
+        classifier_recommended_tier = route_decision.classifier_recommended_tier
+        classifier_confidence = route_decision.classifier_confidence
+        fallback_to_rule_route = route_decision.fallback_to_rule_route
         model_config = APP_CONFIG.models[routed_model]
     else:
         model_config = APP_CONFIG.models.get(requested_model)
@@ -181,7 +195,7 @@ async def chat_completions(
     except BackendClientError as exc:
         elapsed_ms = _elapsed_ms(start_time)
         logger.warning(
-            "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s elapsed_ms=%s failure=%s",
+            "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s classifier_enabled=%s classifier_used=%s classifier_success=%s classifier_task_type=%s classifier_recommended_tier=%s classifier_confidence=%s fallback_to_rule_route=%s elapsed_ms=%s failure=%s",
             request_id,
             user_id,
             requested_model,
@@ -190,6 +204,13 @@ async def chat_completions(
             task_type,
             route_reason,
             estimated_prompt_tokens,
+            classifier_enabled,
+            classifier_used,
+            classifier_success,
+            classifier_task_type,
+            classifier_recommended_tier,
+            classifier_confidence,
+            fallback_to_rule_route,
             elapsed_ms,
             exc,
         )
@@ -208,7 +229,13 @@ async def chat_completions(
         "backend_model": backend_model,
         "task_type": task_type,
         "route_reason": route_reason,
-        "classifier_used": False,
+        "classifier_enabled": classifier_enabled,
+        "classifier_used": classifier_used,
+        "classifier_success": classifier_success,
+        "classifier_task_type": classifier_task_type,
+        "classifier_recommended_tier": classifier_recommended_tier,
+        "classifier_confidence": classifier_confidence,
+        "fallback_to_rule_route": fallback_to_rule_route,
         "auto_upgrade_used": False,
     }
 
@@ -222,7 +249,7 @@ async def chat_completions(
         completion_tokens=completion_tokens,
     )
     logger.info(
-        "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s elapsed_ms=%s success=true",
+        "request_id=%s user=%s requested_model=%s routed_model=%s backend_model=%s task_type=%s route_reason=%s estimated_tokens=%s classifier_enabled=%s classifier_used=%s classifier_success=%s classifier_task_type=%s classifier_recommended_tier=%s classifier_confidence=%s fallback_to_rule_route=%s elapsed_ms=%s success=true",
         request_id,
         user_id,
         requested_model,
@@ -231,6 +258,13 @@ async def chat_completions(
         task_type,
         route_reason,
         estimated_prompt_tokens,
+        classifier_enabled,
+        classifier_used,
+        classifier_success,
+        classifier_task_type,
+        classifier_recommended_tier,
+        classifier_confidence,
+        fallback_to_rule_route,
         elapsed_ms,
     )
 

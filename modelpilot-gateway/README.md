@@ -2,9 +2,9 @@
 
 ModelPilot Gateway is the Python backend gateway for ModelPilot.
 
-Current scope includes FastAPI basics, config loading, logging, API key authentication, basic user permissions, in-memory quotas, rule-based smart-auto routing, and non-streaming OpenAI-compatible forwarding for enabled real models.
+Current scope includes FastAPI basics, config loading, logging, API key authentication, basic user permissions, in-memory quotas, rule-based `smart-auto` routing, lightweight classifier-assisted routing, and non-streaming OpenAI-compatible forwarding for enabled real models.
 
-Not included yet: classifier logic, automatic upgrade, database persistence, Redis, Ollama implementation, or streaming forwarding.
+Not included yet: result validation, automatic upgrade, database persistence, Redis, native Ollama implementation, or streaming forwarding.
 
 ## Requirements
 
@@ -85,6 +85,62 @@ If `base_url` ends with `/v1`, requests are sent to `/v1/chat/completions`.
 
 Supported tier values are `cheap`, `mid`, and `strong`.
 
+## Configure The Classifier
+
+The classifier is optional and disabled by default. It asks a configured OpenAI-compatible backend for strict JSON classification. If the classifier fails, times out, or returns invalid JSON, the request falls back to the Phase 4 rule route.
+
+Use Ollama's OpenAI-compatible endpoint:
+
+```json
+{
+  "models": {
+    "ollama_local": {
+      "enabled": true,
+      "provider": "ollama",
+      "tier": "cheap",
+      "max_context_tokens": 4096,
+      "model": "qwen2.5:7b",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "api_key": ""
+    }
+  },
+  "classifier": {
+    "enabled": true,
+    "backend_model": "ollama_local",
+    "timeout_seconds": 20,
+    "min_confidence": 0.7,
+    "default_virtual_model": "smart-auto"
+  }
+}
+```
+
+Use any OpenAI-compatible model:
+
+```json
+{
+  "models": {
+    "classifier_model": {
+      "enabled": true,
+      "provider": "openai",
+      "tier": "cheap",
+      "max_context_tokens": 8000,
+      "model": "gpt-4o-mini",
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "sk-your-classifier-key"
+    }
+  },
+  "classifier": {
+    "enabled": true,
+    "backend_model": "classifier_model",
+    "timeout_seconds": 20,
+    "min_confidence": 0.7,
+    "default_virtual_model": "smart-auto"
+  }
+}
+```
+
+The classifier only recommends `task_type`, `risk_level`, `complexity`, `needs_json`, `recommended_tier`, and `confidence`. Final model selection still checks rules, enabled models, context limits, and user `allowed_models`.
+
 ## Configure Users
 
 Add or update users under `users` in `config.json`.
@@ -135,7 +191,7 @@ curl -X POST http://127.0.0.1:8000/v1/chat/completions `
   -d '{"model":"cheap_model","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-Use rule-based smart-auto:
+Use `smart-auto`:
 
 ```powershell
 curl -X POST http://127.0.0.1:8000/v1/chat/completions `
@@ -144,20 +200,20 @@ curl -X POST http://127.0.0.1:8000/v1/chat/completions `
   -d '{"model":"smart-auto","messages":[{"role":"user","content":"Write an Amazon listing title"}]}'
 ```
 
-The response includes a `modelpilot` metadata object with request id, routed model, backend model, and routing flags.
+The response includes a `modelpilot` metadata object with request id, routed model, backend model, task type, route reason, and classifier fields.
 
 ## smart-auto Rules
 
 Current rule routing is intentionally simple:
 
-- `translate` or `翻译` routes as `translation`, usually cheap tier.
-- `summarize`, `总结`, or `摘要` routes as `summary`, short summaries usually cheap tier.
-- `rewrite`, `改写`, or `润色` routes as `rewrite`, usually cheap tier.
-- `JSON`, `extract`, or `提取` routes as `json_extraction`, usually mid tier.
-- `Amazon`, `Walmart`, `listing`, `标题`, or `商品描述` routes as `product_copywriting`, usually mid tier.
-- `code`, `python`, `javascript`, `debug`, or `报错` routes as `code_generation`, usually strong tier.
-- `strategy`, `商业`, `战略`, or `分析` routes as `strategy_analysis`, usually strong tier.
-- `legal`, `contract`, `合同`, or `法务` routes as `legal_or_policy`, usually strong tier.
+- `translate` routes as `translation`, usually cheap tier.
+- `summarize` routes as `summary`, short summaries usually cheap tier.
+- `rewrite` routes as `rewrite`, usually cheap tier.
+- `JSON` or `extract` routes as `json_extraction`, usually mid tier.
+- `Amazon`, `Walmart`, or `listing` routes as `product_copywriting`, usually mid tier.
+- `code`, `python`, `javascript`, or `debug` routes as `code_generation`, usually strong tier.
+- `strategy` routes as `strategy_analysis`, usually strong tier.
+- `legal` or `contract` routes as `legal_or_policy`, usually strong tier.
 - Unknown requests default to mid tier.
 
 If estimated tokens exceed `cheap_model.max_context_tokens`, the router upgrades to mid tier. If estimated tokens exceed `mid_model.max_context_tokens`, it upgrades to strong tier. Disabled models and models outside the user's `allowed_models` are skipped.
@@ -185,15 +241,15 @@ Implemented:
 - `GET /v1/models` filtered by authenticated user permissions
 - Non-streaming `POST /v1/chat/completions` for enabled real models
 - Rule-based `smart-auto` routing for enabled real models
+- Optional lightweight classifier guidance for `smart-auto`
 - Basic OpenAI-compatible backend forwarding
 
 Not implemented in this stage:
 
-- Complex permission policy engine
-- Request classifier
+- Result validation
 - Automatic upgrade logic
 - Streaming responses
 - Persistent quota storage
 - Database integration
 - Redis integration
-- Ollama implementation
+- Native Ollama implementation

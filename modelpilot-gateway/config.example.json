@@ -58,6 +58,9 @@
   },
   "classifier": {
     "enabled": false,
+    "backend_model": "ollama_local",
+    "timeout_seconds": 20,
+    "min_confidence": 0.7,
     "default_virtual_model": "smart-auto"
   },
   "validation": {
