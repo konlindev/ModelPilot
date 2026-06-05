@@ -12,7 +12,7 @@ ModelPilot is designed to centralize code for enterprise AI model invocation, wo
 
 - 公开仓库 / Public repository: <https://github.com/konlindev/ModelPilot>
 - 默认分支 / Default branch: `main`
-- 更新分支格式 / Update branch format: `main/update-yyyyMMdd-HHmmss`
+- 更新分支格式 / Update branch format: `main-update-yyyyMMdd-HHmmss`
 
 ## 更新同步 / Update Sync
 

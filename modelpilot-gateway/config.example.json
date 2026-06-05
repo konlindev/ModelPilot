@@ -1,0 +1,130 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "language": "zh-CN",
+    "log_level": "INFO",
+    "trust_proxy_headers": false
+  },
+  "models": {
+    "cheap_model": {
+      "enabled": false,
+      "provider": "openai",
+      "tier": "cheap",
+      "max_context_tokens": 8000,
+      "model": "cheap-model-placeholder",
+      "base_url": "",
+      "api_key": ""
+    },
+    "mid_model": {
+      "enabled": false,
+      "provider": "openai",
+      "tier": "mid",
+      "max_context_tokens": 32000,
+      "model": "mid-model-placeholder",
+      "base_url": "",
+      "api_key": ""
+    },
+    "strong_model": {
+      "enabled": false,
+      "provider": "openai",
+      "tier": "strong",
+      "max_context_tokens": 128000,
+      "model": "strong-model-placeholder",
+      "base_url": "",
+      "api_key": ""
+    },
+    "ollama_local": {
+      "enabled": false,
+      "provider": "ollama",
+      "tier": "cheap",
+      "max_context_tokens": 4096,
+      "model": "ollama-model-placeholder",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "api_key": ""
+    }
+  },
+  "virtual_models": {
+    "smart-auto": {
+      "enabled": true,
+      "strategy": "manual-placeholder",
+      "description": "Placeholder virtual model for future routing.",
+      "candidate_models": [
+        "cheap_model",
+        "mid_model",
+        "strong_model"
+      ]
+    }
+  },
+  "classifier": {
+    "enabled": false,
+    "backend_model": "ollama_local",
+    "timeout_seconds": 20,
+    "min_confidence": 0.7,
+    "default_virtual_model": "smart-auto"
+  },
+  "validation": {
+    "enabled": true,
+    "auto_upgrade_enabled": true,
+    "apply_to_direct_model": false,
+    "min_response_chars": 5,
+    "banned_words": [],
+    "competitor_brand_words": [],
+    "max_prompt_chars": 20000
+  },
+  "users": {
+    "default_user": {
+      "enabled": true,
+      "name": "Default User",
+      "api_key": "sk-modelpilot-test-key",
+      "ip_allowlist": [],
+      "ip_denylist": [],
+      "token_daily_limit": 0,
+      "token_monthly_limit": 0,
+      "request_per_minute": 60,
+      "allowed_hours": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23
+      ],
+      "allowed_models": [
+        "cheap_model",
+        "mid_model",
+        "strong_model",
+        "ollama_local",
+        "smart-auto"
+      ],
+      "allowed_task_types": [
+        "chat"
+      ],
+      "allow_stream": false,
+      "allow_auto_upgrade": false
+    }
+  },
+  "setup": {
+    "completed": false,
+    "language": "zh",
+    "completed_at": null
+  }
+}
