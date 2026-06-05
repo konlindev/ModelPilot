@@ -3,7 +3,11 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.quota import InMemoryQuotaManager
 from app.schemas import AppConfig
+
+
+AUTH_HEADERS = {"Authorization": "Bearer sk-modelpilot-test-key"}
 
 
 def make_test_config() -> AppConfig:
@@ -51,6 +55,7 @@ def make_test_config() -> AppConfig:
                     "enabled": True,
                     "name": "Default User",
                     "api_key": "sk-modelpilot-test-key",
+                    "allowed_models": ["*"],
                 }
             },
         }
@@ -61,9 +66,10 @@ def test_models_returns_enabled_real_and_virtual_models(monkeypatch) -> None:
     import app.main as main_module
 
     monkeypatch.setattr(main_module, "APP_CONFIG", make_test_config())
+    monkeypatch.setattr(main_module, "quota_manager", InMemoryQuotaManager())
     client = TestClient(app)
 
-    response = client.get("/v1/models")
+    response = client.get("/v1/models", headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     model_ids = {item["id"] for item in response.json()["data"]}
@@ -74,10 +80,12 @@ def test_unknown_model_returns_404(monkeypatch) -> None:
     import app.main as main_module
 
     monkeypatch.setattr(main_module, "APP_CONFIG", make_test_config())
+    monkeypatch.setattr(main_module, "quota_manager", InMemoryQuotaManager())
     client = TestClient(app)
 
     response = client.post(
         "/v1/chat/completions",
+        headers=AUTH_HEADERS,
         json={"model": "missing_model", "messages": [{"role": "user", "content": "hi"}]},
     )
 
@@ -89,10 +97,12 @@ def test_streaming_returns_400(monkeypatch) -> None:
     import app.main as main_module
 
     monkeypatch.setattr(main_module, "APP_CONFIG", make_test_config())
+    monkeypatch.setattr(main_module, "quota_manager", InMemoryQuotaManager())
     client = TestClient(app)
 
     response = client.post(
         "/v1/chat/completions",
+        headers=AUTH_HEADERS,
         json={
             "model": "cheap_model",
             "stream": True,
@@ -108,10 +118,12 @@ def test_smart_auto_returns_400(monkeypatch) -> None:
     import app.main as main_module
 
     monkeypatch.setattr(main_module, "APP_CONFIG", make_test_config())
+    monkeypatch.setattr(main_module, "quota_manager", InMemoryQuotaManager())
     client = TestClient(app)
 
     response = client.post(
         "/v1/chat/completions",
+        headers=AUTH_HEADERS,
         json={"model": "smart-auto", "messages": [{"role": "user", "content": "hi"}]},
     )
 
@@ -166,11 +178,13 @@ def test_real_model_forwards_to_openai_compatible_backend(monkeypatch) -> None:
             return MockResponse()
 
     monkeypatch.setattr(main_module, "APP_CONFIG", make_test_config())
+    monkeypatch.setattr(main_module, "quota_manager", InMemoryQuotaManager())
     monkeypatch.setattr(backend_clients.httpx, "AsyncClient", MockAsyncClient)
     client = TestClient(app)
 
     response = client.post(
         "/v1/chat/completions",
+        headers=AUTH_HEADERS,
         json={
             "model": "cheap_model",
             "messages": [{"role": "user", "content": "hello"}],

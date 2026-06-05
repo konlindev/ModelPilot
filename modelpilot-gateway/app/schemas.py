@@ -89,6 +89,7 @@ class ServerConfig(BaseModel):
     port: int = Field(default=8000, ge=1, le=65535)
     language: str = "zh-CN"
     log_level: str = "INFO"
+    trust_proxy_headers: bool = False
 
 
 class ModelConfig(BaseModel):
@@ -114,6 +115,16 @@ class UserConfig(BaseModel):
     enabled: bool = True
     name: str | None = None
     api_key: str
+    ip_allowlist: list[str] = Field(default_factory=list)
+    ip_denylist: list[str] = Field(default_factory=list)
+    token_daily_limit: int | None = Field(default=0, ge=0)
+    token_monthly_limit: int | None = Field(default=0, ge=0)
+    request_per_minute: int | None = Field(default=60, ge=0)
+    allowed_hours: list[int] = Field(default_factory=lambda: list(range(24)))
+    allowed_models: list[str] = Field(default_factory=lambda: ["*"])
+    allowed_task_types: list[str] = Field(default_factory=lambda: ["chat"])
+    allow_stream: bool = False
+    allow_auto_upgrade: bool = False
 
 
 class ClassifierConfig(BaseModel):

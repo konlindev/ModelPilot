@@ -5,13 +5,20 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app import __version__
+from app.auth import (
+    authenticate_user,
+    check_allowed_hours,
+    check_ip_permission,
+    check_model_permission,
+)
 from app.backend_clients import BackendClientError, OpenAICompatibleClient
 from app.config_loader import load_config
 from app.logging_config import setup_logging
+from app.quota import InMemoryQuotaManager
 from app.schemas import (
     ChatCompletionRequest,
     ErrorResponse,
@@ -30,6 +37,7 @@ app = FastAPI(
     version=__version__,
 )
 openai_client = OpenAICompatibleClient()
+quota_manager = InMemoryQuotaManager()
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -43,12 +51,17 @@ def health() -> HealthResponse:
 
 
 @app.get("/v1/models", response_model=ModelListResponse)
-def list_models() -> ModelListResponse:
-    """Return enabled real and virtual models."""
+def list_models(http_request: Request) -> ModelListResponse | JSONResponse:
+    """Return enabled models available to the authenticated user."""
+    try:
+        _, user = _authorize_request(http_request)
+    except HTTPException as exc:
+        return _exception_response(exc)
+
     model_items: list[ModelInfo] = []
 
     for model_id, model_config in APP_CONFIG.models.items():
-        if model_config.enabled:
+        if model_config.enabled and _is_model_allowed(user.allowed_models, model_id):
             model_items.append(
                 ModelInfo(
                     id=model_id,
@@ -60,7 +73,7 @@ def list_models() -> ModelListResponse:
             )
 
     for model_id, model_config in APP_CONFIG.virtual_models.items():
-        if model_config.enabled:
+        if model_config.enabled and _is_model_allowed(user.allowed_models, model_id):
             model_items.append(
                 ModelInfo(
                     id=model_id,
@@ -75,11 +88,19 @@ def list_models() -> ModelListResponse:
 
 
 @app.post("/v1/chat/completions", response_model=None)
-async def chat_completions(request: ChatCompletionRequest) -> Any:
+async def chat_completions(
+    http_request: Request,
+    request: ChatCompletionRequest,
+) -> Any:
     """Forward non-streaming chat completions requests to enabled real models."""
     request_id = str(uuid.uuid4())
     requested_model = request.model
     start_time = time.perf_counter()
+
+    try:
+        user_id, user = _authorize_request(http_request)
+    except HTTPException as exc:
+        return _exception_response(exc)
 
     if request.stream:
         return _error_response(
@@ -87,6 +108,11 @@ async def chat_completions(request: ChatCompletionRequest) -> Any:
             message="streaming not implemented in this phase",
             code="streaming_not_implemented",
         )
+
+    try:
+        check_model_permission(user, requested_model)
+    except HTTPException as exc:
+        return _exception_response(exc)
 
     if requested_model == "smart-auto":
         return _error_response(
@@ -101,6 +127,30 @@ async def chat_completions(request: ChatCompletionRequest) -> Any:
             status_code=404,
             message=f"model not found or disabled: {requested_model}",
             code="model_not_found",
+        )
+
+    if not quota_manager.check_rate_limit(user_id, user.request_per_minute):
+        return _error_response(
+            status_code=429,
+            message="request_per_minute quota exceeded",
+            code="rate_limit_exceeded",
+            error_type="rate_limit_error",
+        )
+
+    estimated_prompt_tokens = quota_manager.estimate_tokens_from_messages(
+        request.messages
+    )
+    if not quota_manager.check_token_quota(
+        user_name=user_id,
+        estimated_tokens=estimated_prompt_tokens,
+        daily_limit=user.token_daily_limit,
+        monthly_limit=user.token_monthly_limit,
+    ):
+        return _error_response(
+            status_code=429,
+            message="token quota exceeded",
+            code="token_quota_exceeded",
+            error_type="rate_limit_error",
         )
 
     backend_model = model_config.model or requested_model
@@ -137,6 +187,14 @@ async def chat_completions(request: ChatCompletionRequest) -> Any:
     }
 
     elapsed_ms = _elapsed_ms(start_time)
+    usage = response_data.get("usage") if isinstance(response_data.get("usage"), dict) else {}
+    prompt_tokens = _safe_int(usage.get("prompt_tokens"), estimated_prompt_tokens)
+    completion_tokens = _safe_int(usage.get("completion_tokens"), 0)
+    quota_manager.record_token_usage(
+        user_name=user_id,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+    )
     logger.info(
         "request_id=%s requested_model=%s backend_model=%s elapsed_ms=%s success=true",
         request_id,
@@ -148,11 +206,40 @@ async def chat_completions(request: ChatCompletionRequest) -> Any:
     return response_data
 
 
-def _error_response(status_code: int, message: str, code: str) -> JSONResponse:
+def _authorize_request(http_request: Request):
+    user_id, user = authenticate_user(http_request, APP_CONFIG)
+    check_ip_permission(user, http_request, APP_CONFIG)
+    check_allowed_hours(user)
+    return user_id, user
+
+
+def _exception_response(exc: HTTPException) -> JSONResponse:
+    message = str(exc.detail)
+    code = _status_code_to_error_code(exc.status_code)
+    error_type = "authentication_error"
+    if exc.status_code == 403:
+        error_type = "permission_error"
+    elif exc.status_code == 429:
+        error_type = "rate_limit_error"
+
+    return _error_response(
+        status_code=exc.status_code,
+        message=message,
+        code=code,
+        error_type=error_type,
+    )
+
+
+def _error_response(
+    status_code: int,
+    message: str,
+    code: str,
+    error_type: str = "invalid_request_error",
+) -> JSONResponse:
     error = ErrorResponse(
         error={
             "message": message,
-            "type": "invalid_request_error",
+            "type": error_type,
             "code": code,
         }
     )
@@ -161,3 +248,24 @@ def _error_response(status_code: int, message: str, code: str) -> JSONResponse:
 
 def _elapsed_ms(start_time: float) -> int:
     return int((time.perf_counter() - start_time) * 1000)
+
+
+def _is_model_allowed(allowed_models: list[str], model_name: str) -> bool:
+    return "*" in allowed_models or model_name in allowed_models
+
+
+def _status_code_to_error_code(status_code: int) -> str:
+    if status_code == 401:
+        return "authentication_failed"
+    if status_code == 403:
+        return "permission_denied"
+    if status_code == 429:
+        return "rate_limit_exceeded"
+    return "request_failed"
+
+
+def _safe_int(value: Any, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
