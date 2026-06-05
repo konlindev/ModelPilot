@@ -17,6 +17,7 @@ from app.auth import (
 )
 from app.backend_clients import BackendClientError, OpenAICompatibleClient
 from app.config_loader import load_config
+from app.i18n import startup_messages
 from app.logging_config import setup_logging
 from app.quota import InMemoryQuotaManager
 from app.router_engine import get_next_upgrade_model, select_model_by_rules
@@ -33,6 +34,8 @@ APP_CONFIG = load_config()
 LOG_FILE_PATH = setup_logging(APP_CONFIG)
 logger = logging.getLogger(__name__)
 logger.info("ModelPilot Gateway starting with log file: %s", LOG_FILE_PATH)
+for startup_message in startup_messages(APP_CONFIG, LOG_FILE_PATH):
+    logger.info(startup_message)
 
 app = FastAPI(
     title="ModelPilot Gateway",
