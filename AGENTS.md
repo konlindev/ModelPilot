@@ -5,7 +5,7 @@
 每次完成代码更新后：
 
 1. 不直接把功能更新提交到 `main`。
-2. 创建 `main/update-yyyyMMdd-HHmmss` 格式的更新分支。
+2. 创建 `main-update-yyyyMMdd-HHmmss` 格式的更新分支。
 3. 在 `docs/updates/` 下新增一份更新说明，写清楚本次变更内容、影响范围和验证方式。
 4. 提交改动并推送更新分支到 GitHub。
 

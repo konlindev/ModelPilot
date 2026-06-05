@@ -19,6 +19,7 @@ logs/
 venv/
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # IDE and OS files
 .idea/
@@ -34,4 +35,3 @@ download/
 *.xls
 *.csv
 *.jsonl
-

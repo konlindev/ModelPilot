@@ -28,7 +28,7 @@ Set-Location $repoRoot
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 if ([string]::IsNullOrWhiteSpace($BranchName)) {
-  $BranchName = "main/update-$stamp"
+  $BranchName = "main-update-$stamp"
 }
 
 $statusBefore = (& git status --short) -join [Environment]::NewLine
